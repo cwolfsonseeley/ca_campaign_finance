@@ -6,3 +6,4 @@ data/**
 *.zip
 matched/**
 docs/**
+readme.html
