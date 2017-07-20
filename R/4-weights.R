@@ -55,7 +55,7 @@ candidate_matrix %>%
     replace_na(list(first = FALSE, mi = FALSE, last = FALSE, geo = FALSE, 
                     occupation = FALSE, employer = FALSE)) %>%
     group_by(ca_id, entity_id) %>%
-    summarise_each(funs(max)) %>% ungroup -> gamma_matrix
+    summarise_all(funs(max)) %>% ungroup -> gamma_matrix
 #####
 # calculate the agree/disagree weights for the non-name fields
 # (name matches have weights that are dependent on the relative frequency

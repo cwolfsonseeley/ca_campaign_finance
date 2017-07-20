@@ -9,7 +9,7 @@ cads_employment <- get_cdw(cads_employment_query)
 # pre-process names to be able to match to cal-access 
 # (see 2-process.R for the cal-access processing step)
 cads_names %<>%
-    mutate_each(funs(tolower), -entity_id) %>%
+    mutate_at(.funs = funs(tolower), .vars = vars(-entity_id)) %>%
     mutate(first_name = str_replace_all(first_name, "[^a-z]", ""),
            last_name  = str_replace_all(last_name, "[^a-z]", "")) %>%
     mutate(middle_initial = str_trim(str_sub(middle_name, 1, 1)))
