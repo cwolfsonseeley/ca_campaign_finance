@@ -36,7 +36,8 @@ candidate_matrix %>%
                               agree_weight[["employer"]], disagree_weight[["employer"]])) %>%
     inner_join(first_wt, by = c("ca_first" = "first_name")) %>%
     inner_join(last_wt, by = c("ca_last" = "last_name")) %>%
-    mutate(wt_first = ifelse(ca_first == cads_first, first_weight, -5),
+    mutate(wt_first = ifelse(
+        stringdist(ca_first, cads_first, method = "jw", p = .1) < .2, first_weight, -5),
            wt_last  = ifelse(ca_last  == cads_last, last_weight, -5)) -> matchscore
 
 matchscore %<>% 
