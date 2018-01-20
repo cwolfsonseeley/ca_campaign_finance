@@ -118,6 +118,9 @@ all_cads_ca %>%
     ungroup %>%
     arrange(desc(n))
 
+# check that max rcpt_date is relatively recent
+all_cads_ca %>% filter(rcpt_date <= Sys.time()) %>% summarise(maxdt = max(rcpt_date))
+
 # create an output file
 # name/degrees/capacity not really necessary, as long as we have the ID
 names_q <- "

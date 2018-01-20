@@ -85,3 +85,12 @@ u[u<.005] <- .005
 agree_weight <- log2(m/u)
 disagree_weight <- log2((1-m)/(1-u))
 
+if (!dir.exists("matched/matchweights")) dir.create("matched/matchweights")
+library(lubridate)
+saveRDS(
+    list(agree_weight = agree_weight,
+         disagree_weight = disagree_weight),
+    file = paste0("matched/matchweights/weights-", year(today()), 
+                  stringr::str_pad(month(today()), width = 2, pad = "0"),
+                  stringr::str_pad(day(today()), width = 2, pad = "0"), ".rds")
+)

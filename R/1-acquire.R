@@ -3,7 +3,7 @@ library(stringr)
 
 # download the cal-access file
 if (!dir.exists("data")) dir.create("data", recursive = TRUE)
-download.file("http://www.sos.ca.gov/campaignfinance/dbwebexport.zip",
+download.file("http://campaignfinance.cdn.sos.ca.gov/dbwebexport.zip",
               dest = "data/cal_access.zip")
 
 # and unzip -- starting with just RCPT_CD.TSV, which has transactions
