@@ -35,11 +35,23 @@ pg <- src_postgres(dbname = "postgres", host = "localhost",
 # now ca is our tbl
 ca <- tbl(pg, "ca_rcpt")
 
+# quick check: is the data actually getting updated as expected?
+test <- ca %>% 
+    select(entity_cd, rcpt_date, amount) %>% 
+    filter(between(rcpt_date, '2006-01-01', '2018-02-28'), 
+           entity_cd == "IND") %>% 
+    mutate(yr = DATE_PART('year', rcpt_date), mo = DATE_PART('month', rcpt_date)) %>% 
+    group_by(yr, mo) %>% 
+    summarise(n = n(), dollars = sum(amount, na.rm = TRUE)) %>% 
+    collect(n = Inf)
+test %>% arrange(yr, mo) %>% tail(17)
+rm(test)
+
 # and now it's easy to grab individual transactions since 1/1/2014
 # and load them into memory with dplyr::collect()
 cal <- ca %>%
     filter(entity_cd == "IND", 
-           rcpt_date >= '2014-01-01') %>%
+           rcpt_date >= '2015-01-01') %>%
     group_by(filing_id) %>%
     mutate(last_amend = max(amend_id)) %>%
     ungroup %>%

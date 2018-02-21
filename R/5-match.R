@@ -26,6 +26,14 @@ last_wt <- ca_frequency_last %>%
     select(last_name = last, 
            last_weight = wt)
 
+saveRDS(
+    list(first_wt = first_wt,
+         last_wt = last_wt),
+    file = paste0("matched/matchweights/nameweights-", year(today()), 
+                  stringr::str_pad(month(today()), width = 2, pad = "0"),
+                  stringr::str_pad(day(today()), width = 2, pad = "0"), ".rds")
+)
+
 # apply agree/disagree weights, as well as frequency-based name match weights
 candidate_matrix %>%
     transmute(ca_id, entity_id, ca_first, cads_first, ca_last, cads_last,
@@ -38,7 +46,7 @@ candidate_matrix %>%
     inner_join(last_wt, by = c("ca_last" = "last_name")) %>%
     mutate(wt_first = ifelse(
         stringdist(ca_first, cads_first, method = "jw", p = .1) < .2, first_weight, -5),
-           wt_last  = ifelse(ca_last  == cads_last, last_weight, -5)) -> matchscore
+        wt_last  = ifelse(ca_last  == cads_last, last_weight, -5)) -> matchscore
 
 matchscore %<>% 
     replace_na(list(wt_geo = 0, wt_occ = 0, wt_emp = 0, 
@@ -50,6 +58,12 @@ matchscore %>%
     summarise(geo = max(wt_geo), occ = max(wt_occ), emp = max(wt_emp), 
               first = max(wt_first), last = max(wt_last)) %>%
     ungroup %>%
+    # left_join(tmp, by = c("ca_id", "entity_id")) %>% 
+    # mutate(occ = ifelse(!is.na(t.occupation) & t.occupation < 1,
+    #                     disagree_weight[["occupation"]], occ),
+    #        emp = ifelse(!is.na(t.employer) & t.employer < 1,
+    #                     disagree_weight[["employer"]], emp)) %>%
+    # select(ca_id:last) %>%
     mutate(score = geo + occ + emp + first + last) %>%
     group_by(ca_id) %>%
     mutate(maxscore = max(score)) %>%
@@ -96,11 +110,97 @@ cal %>%
            last:ctrib_dscr) %>%
     distinct -> all_cads_ca
 
+cdw_devel <- getcdw::connect("URELUAT_DEVEL")
+getcdw::get_cdw("delete from rdata.ca_campaign_stage", dsn = "URELUAT_DEVEL")
+ROracle::dbCommit(cdw_devel)
+
+Sys.setenv(TZ = "DB_TZ")
+Sys.setenv(ORA_SDTZ = "DB_TZ")
+
+ROracle::dbWriteTable(
+    cdw_devel, "CA_CAMPAIGN_STAGE", 
+    all_cads_ca %>% 
+        select(entity_id, filing_id, amend_id, line_item, 
+               form_type, tran_id, tran_type, rcpt_date, amount),
+    schema = "RDATA",
+    overwrite = FALSE, append = TRUE
+)
+ROracle::dbCommit(cdw_devel)
+
+
+######## DO THIS FIX THIS DO THIS FIX THIS ########################
+getcdw::get_cdw("
+delete from rdata.ca_campaign ca
+where exists (
+                select ca.* from rdata.ca_campaign_stage stg
+                where ca.entity_id = stg.entity_id
+                and ca.filing_id = stg.filing_id
+                and ca.tran_id = stg.tran_id
+                and ca.amend_id < stg.amend_id
+)
+", dsn = "URELUAT_DEVEL")
+# 
+# insert new records
+# insert into rdata.ca_campaign
+# select stg.* from rdata.ca_campaign_stage stg
+# left join rdata.ca_campaign ca 
+# on stg.entity_id = ca.entity_id
+# and stg.filing_id = ca.filing_id
+# and stg.line_item = ca.line_item
+# where ca.entity_id is null
+
+getcdw::get_cdw(
+"
+insert into rdata.ca_campaign
+select stg.* 
+from 
+    rdata.ca_campaign_stage stg
+    left join rdata.ca_campaign ca
+        on stg.entity_id = ca.entity_id
+        and stg.filing_id = ca.filing_id
+        and stg.tran_id = ca.tran_id
+where ca.entity_id is null        
+", dsn = "URELUAT_DEVEL")
+ROracle::dbCommit(cdw_devel)
 # information about each transaction in campaign disclosure cover sheet
+library(readr)
 unzip("data/cal_access.zip", files = "CalAccess/DATA/CVR_CAMPAIGN_DISCLOSURE_CD.TSV", 
       exdir = "data", junkpaths = TRUE)
 cvr <- readr::read_tsv("data/CVR_CAMPAIGN_DISCLOSURE_CD.TSV")
+cvr <- cvr[-problems(cvr)$row, ]
 names(cvr) <- tolower(names(cvr))
+
+ca_campaign_cvr <- cvr %>% 
+    select(filing_id, filer_id, amend_id, filer_naml, filer_namf, 
+           cand_naml, cand_namf, bal_name:sup_opp_cd) %>%
+    distinct
+
+cdw_devel <- getcdw::connect("URELUAT_DEVEL")
+getcdw::get_cdw("delete from rdata.ca_campaign_cvr_stage", dsn = "URELUAT_DEVEL")
+ROracle::dbCommit(cdw_devel)
+
+Sys.setenv(TZ = "DB_TZ")
+Sys.setenv(ORA_SDTZ = "DB_TZ")
+
+ROracle::dbWriteTable(
+    cdw_devel, "CA_CAMPAIGN_CVR_STAGE", 
+    ca_campaign_cvr,
+    schema = "RDATA",
+    overwrite = FALSE, append = TRUE
+)
+ROracle::dbCommit(cdw_devel)
+getcdw::get_cdw(
+    "
+insert into rdata.ca_campaign_cvr
+select stg.* 
+from 
+    rdata.ca_campaign_cvr_stage stg
+    left join rdata.ca_campaign_cvr ca
+        on stg.filing_id = ca.filing_id
+        and stg.amend_id = ca.amend_id
+where ca.filing_id is null        
+", dsn = "URELUAT_DEVEL")
+ROracle::dbCommit(cdw_devel)
 
 all_cads_ca %<>%
     left_join(cvr, by = c("filing_id" = "filing_id", 
@@ -129,10 +229,12 @@ where person_or_org = 'P' and record_status_code = 'A'
 "
 names <- get_cdw(names_q)
 
+Sys.unsetenv("TZ")
+Sys.unsetenv("ORA_SDTZ")
 
 # the output file will be placed into the "/matched" subdirectory
 if (!dir.exists("matched")) dir.create("matched", recursive = TRUE)
-all_cads_ca %>%
+all_cads_ca %>% filter(rcpt_date >= lubridate::ymd(20140101)) %>%
     left_join(names, by = "entity_id") %>%
     select(entity_id, name, degrees, capacity, 
            tran_id, rcpt_date, amount, ctrib_dscr,

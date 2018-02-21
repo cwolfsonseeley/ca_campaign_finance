@@ -20,8 +20,8 @@ cads_address %<>%
     mutate(city = tolower(city))
 
 cads_employment %<>%
-    mutate(job_title = tolower(job_title),
-           employer  = tolower(employer))
+    mutate(job_title = str_trim(tolower(job_title)),
+           employer  = str_trim(tolower(employer)))
 
 # and building the corresponding frequency tables
 # (see 5-match.R for frequency-based weight calculations)
