@@ -139,6 +139,7 @@ where exists (
                 and ca.amend_id < stg.amend_id
 )
 ", dsn = "URELUAT_DEVEL")
+ROracle::dbCommit(cdw_devel)
 # 
 # insert new records
 # insert into rdata.ca_campaign

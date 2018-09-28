@@ -38,7 +38,7 @@ ca <- tbl(pg, "ca_rcpt")
 # quick check: is the data actually getting updated as expected?
 test <- ca %>% 
     select(entity_cd, rcpt_date, amount) %>% 
-    filter(between(rcpt_date, '2006-01-01', '2018-02-28'), 
+    filter(between(rcpt_date, '2006-01-01', '2018-10-31'), 
            entity_cd == "IND") %>% 
     mutate(yr = DATE_PART('year', rcpt_date), mo = DATE_PART('month', rcpt_date)) %>% 
     group_by(yr, mo) %>% 
