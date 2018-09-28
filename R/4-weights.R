@@ -50,12 +50,40 @@ candidate_matrix %>%
               mi = ca_mi == cads_mi,
               last = ca_last == cads_last,
               geo = ca_city == cads_city | ca_zip == cads_zip5,
-              occupation = stringdist(ca_occupation, cads_occupation, "cosine", q = 3) < .5,
-              employer = stringdist(ca_employer, cads_employer, "cosine", q = 3) < .5) %>%
+              occupation = ca_occupation != "" & cads_occupation != "" & 
+                  stringdist(ca_occupation, cads_occupation, "cosine", q = 3) < .5,
+              employer = ca_occupation != "" & cads_occupation != "" & 
+                  stringdist(ca_employer, cads_employer, "cosine", q = 3) < .5) %>%
     replace_na(list(first = FALSE, mi = FALSE, last = FALSE, geo = FALSE, 
                     occupation = FALSE, employer = FALSE)) %>%
     group_by(ca_id, entity_id) %>%
     summarise_all(funs(max)) %>% ungroup -> gamma_matrix
+
+# tmp <- gamma_matrix %>% 
+#     filter(occupation > 0 | employer > 0) %>%  
+#     inner_join(candidate_matrix, by = c("ca_id", "entity_id")) %>%
+#     select(ca_id, entity_id, ca_employer, ca_occupation,
+#            cads_employer, cads_occupation) %>%
+#     mutate(cads_employer = str_trim(cads_employer),
+#            cads_occupation = str_trim(cads_occupation))
+# 
+# tmp <- tmp %>%
+#     mutate(occupation = ca_occupation != "" & cads_occupation != "" & 
+#                stringdist(ca_occupation, cads_occupation, "cosine", q = 3) < .5,
+#            employer = ca_occupation != "" & cads_occupation != "" & 
+#                stringdist(ca_employer, cads_employer, "cosine", q = 3) < .5) %>%
+#     replace_na(list(occupation = FALSE, employer = FALSE)) %>%
+#     group_by(ca_id, entity_id) %>%
+#     summarise(occupation = max(occupation), employer = max(employer)) %>%
+#     ungroup
+# 
+# tmp <- tmp %>% rename(t.occupation = occupation, t.employer = employer)
+# 
+# gamma_matrix <- gamma_matrix %>% left_join(tmp, by = c("ca_id", "entity_id")) %>%
+#     mutate(occupation = ifelse(is.na(t.occupation), occupation, t.occupation),
+#            employer = ifelse(is.na(t.employer), employer, t.employer)) %>%
+#     select(ca_id:employer)
+
 #####
 # calculate the agree/disagree weights for the non-name fields
 # (name matches have weights that are dependent on the relative frequency

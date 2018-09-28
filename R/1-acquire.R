@@ -1,5 +1,4 @@
-library(dplyr)
-library(stringr)
+library(tidyverse)
 
 # download the cal-access file
 if (!dir.exists("data")) dir.create("data", recursive = TRUE)
@@ -18,30 +17,57 @@ docpaths <- unzip("data/cal_access.zip", list = TRUE) %>%
 unzip("data/cal_access.zip", files = docpaths, overwrite = TRUE,
       exdir = "docs")
 
-# this script will only work on windows
-# it does the following:
-# - check the transaction file for malformed entries and remove them
-#   (outputting both clean file and the errorlog for review)
-# - drop any existing cal_access schema in your postgres database
-# - create the cal_access schema and proper ca_rcpt table
-# - populate the cal_access.ca_rcpt table with the cleaned up transactions
-shell("load_tables.bat")
+ca_cols <- cols(
+    .default = col_character(),
+    FILING_ID = col_integer(),
+    AMEND_ID = col_integer(),
+    LINE_ITEM = col_integer(),
+    RCPT_DATE = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"),
+    DATE_THRU = col_datetime(format = "%m/%d/%Y %H:%M:%S %p"),
+    AMOUNT = col_double(),
+    CUM_YTD = col_double(),
+    CUM_OTH = col_double()
+)
 
-# to use dplyr, set up the src using src_postgres
-pg <- src_postgres(dbname = "postgres", host = "localhost",
-                   port = 5432, user = "postgres", password = "postgres",
-                   options="-c search_path=cal_access")
+## how far back to pull records
+## i like to go back a few years at least, both to catch older transactions
+## for newly added entities, and to give enough data to estimate match-weights
+mindate <- lubridate::ymd('2015-01-01')
 
-# now ca is our tbl
-ca <- tbl(pg, "ca_rcpt")
+ca_callback <-   function(chunk, pos) {
+    filter(chunk, 
+           RCPT_DATE >= mindate, 
+           RCPT_DATE <= lubridate::today(),
+           ENTITY_CD == "IND")
+}
 
-# and now it's easy to grab individual transactions since 1/1/2014
-# and load them into memory with dplyr::collect()
-cal <- ca %>%
-    filter(entity_cd == "IND", 
-           rcpt_date >= '2014-01-01') %>%
+# read in the data a chunk at a time, only keep the records that are 
+# within the 
+cal <- readr::read_tsv_chunked(
+    "data/RCPT_CD.TSV", 
+    callback = DataFrameCallback$new(ca_callback),
+    col_types = ca_cols, col_names = TRUE,
+    chunk_size = 1000000)
+
+cal <- set_names(cal, str_to_lower)
+
+# quick check: is the data actually getting updated as expected?
+# do recent months have the expected number of 
+# records relative to other months, with the assumption that it takes  
+# several months for most transactions to get filed and represented in the data
+# note that the values will increase leading up to an election/primary, 
+# and decrease immediately after
+cal %>% 
+    select(entity_cd, rcpt_date, amount) %>% 
+    mutate(yr = lubridate::year(rcpt_date), 
+           mo = lubridate::month(rcpt_date)) %>% 
+    group_by(yr, mo) %>% 
+    summarise(n = n(), dollars = sum(amount, na.rm = TRUE)) %>% 
+    arrange(desc(yr), desc(mo))
+
+# only keep the most recently amended version of each transaction
+cal <- cal %>% 
     group_by(filing_id) %>%
     mutate(last_amend = max(amend_id)) %>%
     ungroup %>%
-    filter(amend_id == last_amend) %>%
-    collect(n = Inf)
+    filter(amend_id == last_amend)
