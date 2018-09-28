@@ -203,47 +203,5 @@ where ca.filing_id is null
 ", dsn = "URELUAT_DEVEL")
 ROracle::dbCommit(cdw_devel)
 
-all_cads_ca %<>%
-    left_join(cvr, by = c("filing_id" = "filing_id", 
-                          "amend_id"  = "amend_id")) %>%
-    select(ca_id:ctrib_dscr,
-           filer_naml, cand_naml, cand_namf, bal_name:sup_opp_cd) %>%
-    rename(employer = employer.x, occupation = occupation.x)
-
-# example query -- find most popular ballot initiatives, by # of donors
-all_cads_ca %>% 
-    filter(!is.na(bal_name)) %>%
-    group_by(filer_naml) %>% 
-    summarise(total = sum(amount), 
-              n = n_distinct(entity_id)) %>%
-    ungroup %>%
-    arrange(desc(n))
-
-# check that max rcpt_date is relatively recent
-all_cads_ca %>% filter(rcpt_date <= Sys.time()) %>% summarise(maxdt = max(rcpt_date))
-
-# create an output file
-# name/degrees/capacity not really necessary, as long as we have the ID
-names_q <- "
-select entity_id, report_name as name, degree_major_year as degrees, capacity_rating_desc as capacity from cdw.d_entity_mv
-where person_or_org = 'P' and record_status_code = 'A'
-"
-names <- get_cdw(names_q)
-
 Sys.unsetenv("TZ")
 Sys.unsetenv("ORA_SDTZ")
-
-# the output file will be placed into the "/matched" subdirectory
-if (!dir.exists("matched")) dir.create("matched", recursive = TRUE)
-all_cads_ca %>% filter(rcpt_date >= lubridate::ymd(20140101)) %>%
-    left_join(names, by = "entity_id") %>%
-    select(entity_id, name, degrees, capacity, 
-           tran_id, rcpt_date, amount, ctrib_dscr,
-           filer_naml:sup_opp_cd) %>%
-    distinct %>%
-    select(-tran_id) %>%
-    group_by(entity_id) %>%
-    mutate(total_contributions = sum(amount)) %>%
-    ungroup %>%
-    arrange(desc(total_contributions), entity_id, rcpt_date) %>%
-    write.csv("matched/ca_campaign.csv", row.names = FALSE)
